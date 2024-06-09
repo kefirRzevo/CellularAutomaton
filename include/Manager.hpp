@@ -18,7 +18,7 @@ namespace automaton {
 class Manager final {
   std::optional<std::string> boundCond_;
   std::optional<std::string> boundCondFile_;
-  std::optional<unsigned int> boundCondRandSeed_;
+  std::optional<size_t> width_;
   std::optional<size_t> height_;
   std::optional<unsigned char> ruleVal_;
   bool help_ = false;
@@ -33,8 +33,8 @@ class Manager final {
     config.add_options()
     ("bound-cond", po::value<std::string>(), "Boundary condition")
     ("bound-cond-file", po::value<std::string>(), "File with boundary condition")
-    ("rand", po::value<unsigned int>()->default_value(0), "Seed for randomizing boundary condition")
-    ("height", po::value<size_t>()->default_value(64), "Height of the polygon")
+    ("rand", po::value<size_t>()->default_value(400), "Width for randomizing boundary condition")
+    ("height", po::value<size_t>()->default_value(300), "Height of the polygon")
     ("rule", po::value<unsigned int>()->default_value(110), "Rule that will be applied");
 
     options_.add(generic).add(config);
@@ -62,8 +62,8 @@ class Manager final {
         boundCondFile_.emplace(boundCondFile);
       }
       if (vm.count("rand")) {
-        auto boundCondRandSeed = vm["rand"].as<unsigned int>();
-        boundCondRandSeed_.emplace(boundCondRandSeed);
+        auto width = vm["rand"].as<size_t>();
+        width_.emplace(width);
       }
       if (vm.count("height")) {
         auto height = vm["height"].as<size_t>();
@@ -112,9 +112,9 @@ class Manager final {
       std::ostringstream fileBuf;
       fileBuf << file.rdbuf();
       boundCond = Row{fileBuf.str()};
-    } else if (boundCondRandSeed_.has_value()) {
-      boundCond = Row{height};
-      boundCond.randomize(boundCondRandSeed_.value());
+    } else if (width_.has_value()) {
+      boundCond = Row{width_.value()};
+      boundCond.randomize();
     } else {
       throw std::logic_error("Boundary condition isn't set");
     }

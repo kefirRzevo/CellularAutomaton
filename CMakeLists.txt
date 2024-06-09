@@ -39,3 +39,4 @@ target_link_libraries(
     ${Boost_DYNAMIC_BITSET_LIBRARY}
     sfml-graphics sfml-window sfml-system
 )
+#g++ -std=c++17 -g -lsfml-graphics -lsfml-window -lsfml-system -lboost_program_options Automaton.cpp

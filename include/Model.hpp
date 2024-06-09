@@ -11,14 +11,17 @@
 namespace automaton {
 
 class Rule {
-  unsigned char val_;
-
 public:
-  Rule(unsigned char val) : val_(val) {}
+  using value_type = unsigned char;
+
+  Rule(value_type val) : val_(val) {}
 
   bool calculateValue(std::bitset<3> neighbors) const {
     return val_ & (1 << neighbors.to_ulong());
   }
+
+private:
+  value_type val_;
 };
 
 class Row {
@@ -45,32 +48,30 @@ public:
     std::cout << string << std::endl;
   }
 
-  void randomize(unsigned int seed) {
-    std::srand(seed);
+  void randomize() {
+    std::srand(0);
     std::vector<bool> data(data_.size());
-    size_t size = std::rand() % data_.size();
-    std::fill(data.begin(), data.begin() + size, 1);
+    size_t num_filled = std::rand() % data_.size();
+    std::fill(data.begin(), data.begin() + num_filled, 1);
     std::shuffle(data.begin(), data.end(), std::mt19937{});
     for (size_t i = 0; i != data_.size(); ++i) {
       data_.set(i, data[i]);
     }
-    data_.shrink_to_fit();
   }
 };
 
 class Polygon {
   size_t width_;
   size_t height_;
-  size_t curRowIndx_;
 
   std::vector<Row> rows_;
 
 public:
   Polygon(size_t height, const Row& boundaryCond)
   : width_(boundaryCond.size()), height_(height),
-    curRowIndx_(0), rows_(height) {
+    rows_(height) {
       std::fill(rows_.begin(), rows_.end(), Row{width_});
-      rows_[0] = boundaryCond;
+      rows_.front() = boundaryCond;
     }
 
   size_t getWidth() const { return width_; }
@@ -84,16 +85,24 @@ public:
   auto end() { return rows_.end(); }
   auto end() const { return rows_.end(); }
 
-  void update(const Rule& rule) {
-    auto& curRow = rows_.at(curRowIndx_);
-    curRowIndx_ = (curRowIndx_ + 1) % height_;
-    auto& nextRow = rows_.at(curRowIndx_);
-    std::bitset<3> neighbors;
-    for (auto i = 0; i != static_cast<int>(width_); ++i) {
-      neighbors[0] = curRow.get((i - 1) % width_);
-      neighbors[1] = curRow.get(i);
-      neighbors[2] = curRow.get((i + 1) % width_);
-      nextRow.set(i, rule.calculateValue(neighbors));
+  void fill(const Rule& rule) {
+    auto prevRow = rows_.begin();
+    auto curRow = std::next(rows_.begin());
+    for (; curRow != rows_.end(); ++curRow) {
+      std::bitset<3> neighbors;
+      for (auto i = 0; i != static_cast<int>(width_); ++i) {
+        neighbors[0] = prevRow->get((i - 1) % width_);
+        neighbors[1] = prevRow->get(i);
+        neighbors[2] = prevRow->get((i + 1) % width_);
+        curRow->set(i, rule.calculateValue(neighbors));
+      }
+      prevRow = curRow;
+    }
+  }
+
+  void dump() const {
+    for (const auto& row : rows_) {
+      row.dump();
     }
   }
 };
@@ -106,8 +115,8 @@ public:
   Model(const Rule& rule, const Polygon& poly)
   : rule_(rule), poly_(poly) {}
 
-  void update() {
-    poly_.update(rule_);
+  void fill() {
+    poly_.fill(rule_);
   }
 
   const Polygon& getPolygon() const {
