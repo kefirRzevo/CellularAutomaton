@@ -16,13 +16,22 @@ class View {
   sf::Texture sfTexture_;
   std::vector<sf::Color> buf_;
 
-  void drawPolygon(const Polygon& poly) {
-    auto width = poly.getWidth(), height = poly.getHeight();
+  void fillBuf(const Polygon& poly) {
+    auto width = poly.width(), height = poly.height();
+    buf_.resize(width * height);
+    buf_.shrink_to_fit();
     for (size_t i = 0; i != height; ++i) {
       for (size_t j = 0; j != width; ++j) {
-        buf_[i * width + j] = poly[i].get(j) ? sf::Color::White : sf::Color::Black;
+        if (poly[i][j]) {
+          buf_[i * width + j] = sf::Color::Black;
+        } else {
+          buf_[i * width +  j] = sf::Color::White;
+        }
       }
     }
+  }
+
+  void drawPolygon() {
     sfTexture_.update(reinterpret_cast<sf::Uint8*>(buf_.data()));
     sf::Sprite sfSprite{sfTexture_};
     auto scaleX = sfView_.getSize().x / sfTexture_.getSize().x;
@@ -35,17 +44,16 @@ class View {
 public:
   View(Model& model, unsigned int width = 800, unsigned int height = 600)
   : model_(model) {
+    model_.fill();
     const auto& poly = model.getPolygon();
+    fillBuf(poly);
     sfWindow_.create(sf::VideoMode(width, height), "Automata");
     sfView_ = sfWindow_.getDefaultView();
-    sfTexture_.create(poly.getWidth(), poly.getHeight());
-    buf_.resize(poly.getWidth() * poly.getHeight());
-    buf_.shrink_to_fit();
+    sfTexture_.create(poly.width(), poly.height());
   }
 
   void run() {
     sf::Event sfEvent;
-    model_.fill();
     while(sfWindow_.isOpen()) {
       while (sfWindow_.pollEvent(sfEvent)) {
         if (sfEvent.type == sf::Event::Closed) {
@@ -59,7 +67,7 @@ public:
           sfWindow_.setView(sfView_);
         }
       }
-      drawPolygon(model_.getPolygon());
+      drawPolygon();
       sfWindow_.display();
     }
   }

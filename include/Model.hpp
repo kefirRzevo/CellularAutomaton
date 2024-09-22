@@ -1,14 +1,22 @@
 #pragma once
 
+#include <deque>
 #include <string>
 #include <random>
 #include <bitset>
 #include <iostream>
 #include <algorithm>
 
-#include <boost/dynamic_bitset.hpp> 
-
 namespace automaton {
+
+inline
+void dump(const std::deque<bool>& data, std::ostream& os) {
+  std::string out(data.size(), '0');
+  std::transform(data.begin(), data.end(), std::back_inserter(out),
+    [](auto&& it) { return it ? '1' : '0'; }
+  );
+  os << out << std::endl;
+}
 
 class Rule {
 public:
@@ -16,7 +24,7 @@ public:
 
   Rule(value_type val) : val_(val) {}
 
-  bool calculateValue(std::bitset<3> neighbors) const {
+  bool value(std::bitset<3> neighbors) const {
     return val_ & (1 << neighbors.to_ulong());
   }
 
@@ -24,85 +32,108 @@ private:
   value_type val_;
 };
 
-class Row {
-  boost::dynamic_bitset<> data_;
+class BoundCond {
+  std::deque<bool> data_;
 
 public:
-  Row() = default;
+  BoundCond() = default;
 
-  Row(size_t width) {
-    data_.resize(width);
-    data_.shrink_to_fit();
+  BoundCond(std::string_view string) {
+    std::transform(string.begin(), string.end(), std::back_inserter(data_),
+      [](auto&& it) {
+        switch (it) {
+          case '0': return false;
+          case '1': return true;
+          default:
+            auto msg = "Unknown symbol '" + std::string(it, 1) + "'";
+            throw std::runtime_error(msg);
+        }
+      }
+    );
   }
 
-  Row(const std::string& string) : data_(string) {}
-
-  size_t size() const { return data_.size(); }
-
-  void set(size_t indx, bool val) { data_.set(indx, val); }
-  bool get(size_t indx) const { return data_.test(indx); }
-
-  void dump() const {
-    std::string string(data_.size(), ' ');
-    boost::to_string(data_, string);
-    std::cout << string << std::endl;
-  }
-
-  void randomize() {
+  void randomize(size_t size) {
     std::srand(0);
-    std::vector<bool> data(data_.size());
-    size_t num_filled = std::rand() % data_.size();
-    std::fill(data.begin(), data.begin() + num_filled, 1);
-    std::shuffle(data.begin(), data.end(), std::mt19937{});
-    for (size_t i = 0; i != data_.size(); ++i) {
-      data_.set(i, data[i]);
-    }
+    data_.clear();
+    data_.insert(data_.begin(), std::rand() % size, true);
+    data_.resize(size);
+    std::shuffle(data_.begin(), data_.end(), std::mt19937{});
+  }
+
+  void dump(std::ostream& os) const {
+    automaton::dump(data_, os);
+  }
+
+  auto size() const { return data_.size(); }
+  auto begin() const { return data_.begin(); }
+  auto end() const { return data_.end(); }
+};
+
+class RowBuilder {
+  std::string data_;
+
+public:
+  RowBuilder& addEther() {
+    data_.append("11111000100110");
+    return *this;
+  }
+
+  RowBuilder& addA() {
+    data_.append("100110");
+    return *this;
+  }
+
+  RowBuilder& addA2() {
+    data_.append("111000100110");
+    return *this;
+  }
+
+  BoundCond create() {
+    BoundCond result{data_};
+    data_.clear();
+    return result;
   }
 };
 
 class Polygon {
-  size_t width_;
-  size_t height_;
+  using Row = std::deque<bool>;
 
   std::vector<Row> rows_;
 
 public:
-  Polygon(size_t height, const Row& boundaryCond)
-  : width_(boundaryCond.size()), height_(height),
-    rows_(height) {
-      std::fill(rows_.begin(), rows_.end(), Row{width_});
-      rows_.front() = boundaryCond;
+  template<class InputIt>
+  Polygon(size_t height, InputIt first, InputIt last)
+  : rows_(height) {
+      rows_.front() = Row{first, last};
     }
 
-  size_t getWidth() const { return width_; }
-  size_t getHeight() const { return height_; }
+  size_t width() const { return rows_.front().size(); }
+  size_t height() const { return rows_.size(); }
 
-  auto& operator[](size_t indx) { return rows_[indx]; }
   const auto& operator[](size_t indx) const { return rows_[indx]; }
 
-  auto begin() { return rows_.begin(); }
   auto begin() const { return rows_.begin(); }
-  auto end() { return rows_.end(); }
   auto end() const { return rows_.end(); }
 
   void fill(const Rule& rule) {
     auto prevRow = rows_.begin();
     auto curRow = std::next(rows_.begin());
     for (; curRow != rows_.end(); ++curRow) {
+      curRow->resize(width());
       std::bitset<3> neighbors;
-      for (auto i = 0; i != static_cast<int>(width_); ++i) {
-        neighbors[0] = prevRow->get((i - 1) % width_);
-        neighbors[1] = prevRow->get(i);
-        neighbors[2] = prevRow->get((i + 1) % width_);
-        curRow->set(i, rule.calculateValue(neighbors));
+      for (auto i = 0; i != static_cast<int>(width()); ++i) {
+        neighbors[0] = prevRow->at((i + 1) % width());
+        neighbors[1] = prevRow->at(i);
+        neighbors[2] = prevRow->at((i - 1 + width()) % width());
+        curRow->at(i) = rule.value(neighbors);
       }
       prevRow = curRow;
     }
   }
 
-  void dump() const {
+  void dump(std::ostream& os) const {
     for (const auto& row : rows_) {
-      row.dump();
+      automaton::dump(row, os);
     }
   }
 };
@@ -112,8 +143,8 @@ class Model {
   Polygon poly_;
 
 public:
-  Model(const Rule& rule, const Polygon& poly)
-  : rule_(rule), poly_(poly) {}
+  Model(Rule&& rule, Polygon&& poly)
+  : rule_(std::move(rule)), poly_(std::move(poly)) {}
 
   void fill() {
     poly_.fill(rule_);
