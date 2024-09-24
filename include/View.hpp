@@ -16,17 +16,18 @@ class View {
   sf::Texture sfTexture_;
   std::vector<sf::Color> buf_;
 
-  void fillBuf(const Polygon& poly) {
-    auto width = poly.width(), height = poly.height();
+  void fillBuf() {
+    const auto& poly = model_.getPolygon();
+    auto width = poly.width();
+    auto height = poly.height();
     buf_.resize(width * height);
     buf_.shrink_to_fit();
     for (size_t i = 0; i != height; ++i) {
       for (size_t j = 0; j != width; ++j) {
-        if (poly[i][j]) {
+        if (poly[i][j])
           buf_[i * width + j] = sf::Color::Black;
-        } else {
+        else
           buf_[i * width +  j] = sf::Color::White;
-        }
       }
     }
   }
@@ -42,11 +43,10 @@ class View {
   }
 
 public:
-  View(Model& model, unsigned int width = 800, unsigned int height = 600)
+  View(Model&& model, unsigned int width = 800, unsigned int height = 600)
   : model_(model) {
-    model_.fill();
     const auto& poly = model.getPolygon();
-    fillBuf(poly);
+    fillBuf();
     sfWindow_.create(sf::VideoMode(width, height), "Automata");
     sfView_ = sfWindow_.getDefaultView();
     sfTexture_.create(poly.width(), poly.height());

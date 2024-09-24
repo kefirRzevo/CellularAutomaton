@@ -2,11 +2,11 @@
 
 #include <boost/program_options.hpp>
 #include <filesystem>
-#include <stdexcept>
-#include <optional>
-#include <iostream>
 #include <fstream>
+#include <iostream>
+#include <optional>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 
 #include "View.hpp"
@@ -30,12 +30,16 @@ class Manager final {
     generic.add_options()("help,h", "help message");
 
     po::options_description config("Configuration");
-    config.add_options()
-    ("bound-cond-str", po::value<std::string>(), "Boundary condition string")
-    ("bound-cond-file", po::value<std::string>(), "File with boundary condition")
-    ("rand", po::value<size_t>()->default_value(400), "Width for randomizing boundary condition")
-    ("height", po::value<size_t>()->default_value(300)->required(), "Height of the polygon")
-    ("rule", po::value<unsigned int>()->default_value(110)->required(), "Rule that will be applied");
+    config.add_options()("bound-cond-str", po::value<std::string>(),
+                         "Boundary condition string")(
+        "bound-cond-file", po::value<std::string>(),
+        "File with boundary condition")(
+        "rand", po::value<size_t>()->default_value(400),
+        "Width for randomizing boundary condition")(
+        "height", po::value<size_t>()->default_value(300)->required(),
+        "Height of the polygon")(
+        "rule", po::value<unsigned int>()->default_value(110)->required(),
+        "Rule that will be applied");
 
     options_.add(generic).add(config);
   }
@@ -53,23 +57,18 @@ class Manager final {
         return;
       }
       std::filesystem::path fullpath;
-      if (vm.count("bound-cond-str")) {
+      if (vm.count("bound-cond-str"))
         boundCondStr_ = vm["bound-cond-str"].as<std::string>();
-      }
-      if (vm.count("bound-cond-file")) {
+      if (vm.count("bound-cond-file"))
         boundCondFile_ = vm["bound-cond-file"].as<std::string>();
-      }
-      if (vm.count("rand")) {
+      if (vm.count("rand"))
         width_ = vm["rand"].as<size_t>();
-      }
-      if (vm.count("height")) {
+      if (vm.count("height"))
         height_ = vm["height"].as<size_t>();
-      }
       if (vm.count("rule")) {
         auto ruleVal = vm["rule"].as<unsigned int>();
-        if (ruleVal > 255) {
+        if (ruleVal > 255)
           throw std::logic_error("Max rule is 2^8-1=255");
-        }
         ruleVal_ = ruleVal;
       }
     } catch (const po::required_option &e) {
@@ -77,16 +76,14 @@ class Manager final {
         std::cout << options_ << std::endl;
         help_ = true;
         return;
-      } else {
-        throw;
       }
+      throw;
     }
   }
 
   void process() {
-    if (help_) {
+    if (help_)
       return;
-    }
     BoundCond boundCond;
     if (boundCondStr_.has_value()) {
       boundCond = BoundCond{boundCondStr_.value()};
@@ -98,12 +95,12 @@ class Manager final {
     } else if (width_.has_value()) {
       boundCond.randomize(width_.value());
     } else {
-      throw std::logic_error("Boundary condition isn't set");
+      throw std::logic_error("Boundary condition is not set");
     }
     Rule rule{ruleVal_};
     Polygon poly{height_, boundCond.begin(), boundCond.end()};
     Model model{std::move(rule), std::move(poly)};
-    View view{model};
+    View view{std::move(model)};
     view.run();
   }
 
@@ -115,4 +112,4 @@ public:
   }
 };
 
-} // namespace paracl
+} // namespace automaton
