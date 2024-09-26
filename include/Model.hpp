@@ -3,26 +3,29 @@
 #include <algorithm>
 #include <bitset>
 #include <deque>
+#include <filesystem>
 #include <iostream>
 #include <random>
 #include <string>
+#include <unordered_map>
+
+#include "Utils.hpp"
+
+namespace fs = std::filesystem;
+
+fs::path repoPath = fs::path(__FILE__).parent_path();
 
 namespace automaton {
 
-inline void dump(const std::deque<bool> &data, std::ostream &os) {
-  std::string out(data.size(), '0');
-  std::transform(data.begin(), data.end(), std::back_inserter(out),
-                 [](auto &&it) { return it ? '1' : '0'; });
-  os << out << std::endl;
-}
-
-class Rule {
+class Rule final {
 public:
   using value_type = unsigned char;
 
   Rule(value_type val) : val_(val) {}
 
-  bool value(std::bitset<3> neighbors) const {
+  value_type getValue() const noexcept { return val_; }
+
+  bool apply(std::bitset<3> neighbors) const {
     return val_ & (1 << neighbors.to_ulong());
   }
 
@@ -30,15 +33,18 @@ private:
   value_type val_;
 };
 
-class BoundCond {
-  std::deque<bool> data_;
+class BoundCond final {
+  BoolStorage data_;
 
 public:
+  using DataIter = BoolStorage::const_iterator;
+
   BoundCond() = default;
 
-  BoundCond(std::string_view string) {
-    std::transform(string.begin(), string.end(), std::back_inserter(data_),
-                   [](auto &&it) {
+  static BoundCond createFromString(std::string_view string) {
+    BoundCond boundCond;
+    std::transform(string.begin(), string.end(),
+                   std::back_inserter(boundCond.data_), [](auto &&it) {
                      switch (it) {
                      case '0':
                        return false;
@@ -49,45 +55,51 @@ public:
                        throw std::runtime_error(msg);
                      }
                    });
+    return boundCond;
   }
 
-  void randomize(size_t size) {
+  static BoundCond createRandom(size_t width) {
+    BoundCond boundCond;
     std::srand(0);
-    data_.clear();
-    data_.insert(data_.begin(), std::rand() % size, true);
-    data_.resize(size);
-    std::shuffle(data_.begin(), data_.end(), std::mt19937{});
+    auto &data = boundCond.data_;
+    data.clear();
+    data.insert(data.begin(), std::rand() % width, true);
+    data.resize(width);
+    data.shrink_to_fit();
+    std::shuffle(data.begin(), data.end(), std::mt19937{});
+    return boundCond;
   }
 
-  void dump(std::ostream &os) const { automaton::dump(data_, os); }
+  void dump(std::ostream &os) const {
+    os << automaton::boolStorageToString(data_) << std::endl;
+  }
 
-  auto size() const { return data_.size(); }
-  auto begin() const { return data_.begin(); }
-  auto end() const { return data_.end(); }
+  size_t size() const { return data_.size(); }
+  DataIter begin() const { return data_.begin(); }
+  DataIter end() const { return data_.end(); }
 };
 
-class RowBuilder final {
+class BoundCondBuilder final {
   std::string data_;
 
+  using GliderStorage = std::unordered_map<std::string, std::string>;
+
+  GliderStorage gliders_;
+
+  void initialize() {
+    for (auto &&gliderIter : fs::directory_iterator{repoPath / "resources"}) {
+      auto gliderPath = gliderIter.path();
+      auto gliderName = gliderPath.filename().generic_u8string();
+      auto gliderString = automaton::readAndJoin(gliderPath.generic_u8string());
+      gliders_.emplace(gliderName, gliderString);
+    }
+  }
+
 public:
-  RowBuilder &addEther() {
-    data_.append("11111000100110");
-    return *this;
-  }
+  BoundCondBuilder() { initialize(); }
 
-  RowBuilder &addA() {
-    data_.append("100110");
-    return *this;
-  }
-
-  RowBuilder &addA2() {
-    data_.append("111000100110");
-    return *this;
-  }
-
-  BoundCond create() {
-    BoundCond result{data_};
-    data_.clear();
+  BoundCond build(std::string_view pathToGliders) {
+    BoundCond result;
     return result;
   }
 };
@@ -95,7 +107,7 @@ public:
 class Polygon final {
 public:
   using size_type = size_t;
-  using Row = std::deque<bool>;
+  using Row = BoolStorage;
   using RowStorage = std::vector<Row>;
   using RowIter = RowStorage::const_iterator;
 
@@ -119,14 +131,14 @@ public:
   void fill(const Rule &rule) {
     auto prevRow = rows_.begin();
     auto curRow = std::next(rows_.begin());
+    std::bitset<3> neighbors;
     for (; curRow != rows_.end(); ++curRow) {
       curRow->resize(width());
-      std::bitset<3> neighbors;
       for (size_type i = 0; i != width(); ++i) {
         neighbors[0] = prevRow->at((i + 1) % width());
         neighbors[1] = prevRow->at(i);
         neighbors[2] = prevRow->at((i - 1 + width()) % width());
-        curRow->at(i) = rule.value(neighbors);
+        curRow->at(i) = rule.apply(neighbors);
       }
       prevRow = curRow;
     }
@@ -134,11 +146,11 @@ public:
 
   void dump(std::ostream &os) const {
     for (const auto &row : rows_)
-      automaton::dump(row, os);
+      os << automaton::boolStorageToString(row) << std::endl;
   }
 };
 
-class Model {
+class Model final {
   Rule rule_;
   Polygon poly_;
 

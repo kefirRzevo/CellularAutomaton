@@ -1,6 +1,6 @@
 #include "include/Manager.hpp"
 
-int main(int argc, const char* argv[]) {
+auto main(int argc, const char* argv[]) -> int {
   try {
     automaton::Manager manager;
     manager.run(argc, argv);

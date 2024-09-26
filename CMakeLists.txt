@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.16)
 project(automaton)
 
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_FLAGS "-O3 -Wall -Wextra")
 
 find_package(Boost 1.73 REQUIRED COMPONENTS program_options)
 include(FetchContent)

@@ -18,6 +18,7 @@ namespace automaton {
 class Manager final {
   std::optional<std::string> boundCondStr_;
   std::optional<std::string> boundCondFile_;
+  std::optional<std::string> buildFile_;
   std::optional<size_t> width_;
   size_t height_;
   unsigned char ruleVal_;
@@ -34,9 +35,11 @@ class Manager final {
                          "Boundary condition string")(
         "bound-cond-file", po::value<std::string>(),
         "File with boundary condition")(
-        "rand", po::value<size_t>()->default_value(400),
+        "build-file", po::value<std::string>(),
+        "File to build boundary condition")(
+        "rand", po::value<size_t>()->default_value(4000),
         "Width for randomizing boundary condition")(
-        "height", po::value<size_t>()->default_value(300)->required(),
+        "height", po::value<size_t>()->default_value(3000)->required(),
         "Height of the polygon")(
         "rule", po::value<unsigned int>()->default_value(110)->required(),
         "Rule that will be applied");
@@ -61,6 +64,8 @@ class Manager final {
         boundCondStr_ = vm["bound-cond-str"].as<std::string>();
       if (vm.count("bound-cond-file"))
         boundCondFile_ = vm["bound-cond-file"].as<std::string>();
+      if (vm.count("build-file"))
+        buildFile_ = vm["build-file"].as<std::string>();
       if (vm.count("rand"))
         width_ = vm["rand"].as<size_t>();
       if (vm.count("height"))
@@ -86,16 +91,18 @@ class Manager final {
       return;
     BoundCond boundCond;
     if (boundCondStr_.has_value()) {
-      boundCond = BoundCond{boundCondStr_.value()};
+      boundCond = BoundCond::createFromString(boundCondStr_.value());
     } else if (boundCondFile_.has_value()) {
-      std::ifstream file{boundCondFile_.value()};
-      std::ostringstream fileBuf;
-      fileBuf << file.rdbuf();
-      boundCond = BoundCond{fileBuf.str()};
+      auto string = automaton::readAndJoin(boundCondFile_.value());
+      boundCond = BoundCond::createFromString(string);
+    } else if (buildFile_.has_value()) {
+      BoundCondBuilder builder;
+      boundCond = builder.build(buildFile_.value());
     } else if (width_.has_value()) {
-      boundCond.randomize(width_.value());
+      boundCond = BoundCond::createRandom(width_.value());
     } else {
-      throw std::logic_error("Boundary condition is not set");
+      auto msg = "Boundary condition is not set";
+      throw std::runtime_error(msg);
     }
     Rule rule{ruleVal_};
     Polygon poly{height_, boundCond.begin(), boundCond.end()};
