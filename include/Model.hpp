@@ -13,7 +13,7 @@
 
 namespace fs = std::filesystem;
 
-fs::path repoPath = fs::path(__FILE__).parent_path();
+fs::path repoPath = fs::path(__FILE__).parent_path().parent_path();
 
 namespace automaton {
 
@@ -82,25 +82,79 @@ public:
 class BoundCondBuilder final {
   std::string data_;
 
-  using GliderStorage = std::unordered_map<std::string, std::string>;
+  using GlidersCollection = std::unordered_map<std::string, std::string>;
 
-  GliderStorage gliders_;
+  GlidersCollection gliders_;
 
   void initialize() {
     for (auto &&gliderIter : fs::directory_iterator{repoPath / "resources"}) {
       auto gliderPath = gliderIter.path();
       auto gliderName = gliderPath.filename().generic_u8string();
       auto gliderString = automaton::readAndJoin(gliderPath.generic_u8string());
-      gliders_.emplace(gliderName, gliderString);
+      gliders_.emplace(std::move(gliderName), std::move(gliderString));
     }
+  }
+
+  void dumpGlidersCollection(std::ostream &os) const {
+    os << gliders_.size() << " gliders" << std::endl;
+    for (auto &&[name, value] : gliders_) {
+      os << name << std::endl;
+      os << value << std::endl;
+    }
+  }
+
+  struct ParsedGlider {
+    size_t repeatsCount_;
+    std::string name_;
+
+    ParsedGlider(size_t repeatCount, std::string &&name)
+        : repeatsCount_(repeatCount), name_(std::move(name)) {}
+  };
+
+  using ParsedGliders = std::vector<ParsedGlider>;
+
+  ParsedGliders parseGliders(std::string_view buildGlidersPath) {
+    auto string = automaton::readAndJoin(buildGlidersPath);
+    std::stringstream ss{string};
+    std::string gliderName;
+    auto isPosNumber = [](std::string_view string) -> bool {
+      return std::all_of(string.begin(), string.end(),
+                         [](auto &&it) { return std::isdigit(it); });
+    };
+
+    ParsedGliders parsedGliders;
+    std::string word;
+    while (ss >> word) {
+      int repeatsCount = 1;
+      if (isPosNumber(word)) {
+        repeatsCount = std::atoi(word.c_str());
+        ss >> word;
+      }
+      parsedGliders.emplace_back(repeatsCount, std::move(word));
+    }
+    return parsedGliders;
   }
 
 public:
   BoundCondBuilder() { initialize(); }
 
-  BoundCond build(std::string_view pathToGliders) {
-    BoundCond result;
-    return result;
+  BoundCond build(std::string_view buildGlidersPath) {
+    std::string resString;
+    auto parsedGliders = parseGliders(buildGlidersPath);
+    if (parsedGliders.empty()) {
+      auto msg = "No gliders in '" + std::string(buildGlidersPath) + "'";
+      throw std::runtime_error(msg);
+    }
+    for (auto &&glider : parsedGliders) {
+      auto found = gliders_.find(std::string(glider.name_));
+      if (found == gliders_.end()) {
+        auto msg = "Glider '" + std::string(glider.name_) + "' not found";
+        throw std::runtime_error(msg);
+      }
+      for (size_t i = 0; i != glider.repeatsCount_; ++i)
+        resString.append(found->second.c_str());
+    }
+    return BoundCond::createFromString(resString);
   }
 };
 

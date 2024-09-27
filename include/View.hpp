@@ -55,20 +55,18 @@ class View final {
   }
 
   void drawVisiblePart() {
-    auto x = visiblePart_.left;
-    auto y = visiblePart_.top;
     auto width = visiblePart_.width;
     auto height = visiblePart_.height;
-    assert(x + width <= polyWidth_);
-    assert(y + height <= polyHeight_);
+    assert(visiblePart_.left + width <= polyWidth_);
+    assert(visiblePart_.top + height <= polyHeight_);
     fillVisiblePartBuf();
     sf::Uint8 *data = reinterpret_cast<sf::Uint8 *>(visiblePartBuf_.data());
     if (sfTexture_.getSize().x != width || sfTexture_.getSize().y != height)
       sfTexture_.create(width, height);
     sfTexture_.update(data);
     sf::Sprite sfSprite{sfTexture_};
-    float scaleX = windowWidth_ / width;
-    float scaleY = windowHeight_ / height;
+    auto scaleX = static_cast<float>(windowWidth_) / width;
+    auto scaleY = static_cast<float>(windowHeight_) / height;
     if (windowWidth_ != width || windowHeight_ != height)
       sfSprite.scale(scaleX, scaleY);
     sfWindow_.draw(sfSprite);
@@ -98,7 +96,7 @@ class View final {
   }
 
   void moveVisiblePart(Moving side) noexcept {
-    const size_type shift = 20;
+    const size_type shift = 100;
     auto &top = visiblePart_.top;
     auto &left = visiblePart_.left;
     auto width = visiblePart_.width;
@@ -126,7 +124,7 @@ class View final {
   }
 
 public:
-  View(Model &&model, size_type width = 800, size_type height = 600)
+  View(Model &&model, size_type width = 1248, size_type height = 868)
       : model_(model), windowWidth_(width), windowHeight_(height),
         polyWidth_(model_.getPolygon().width()),
         polyHeight_(model_.getPolygon().height()) {
@@ -135,7 +133,7 @@ public:
                                        std::min(windowHeight_, polyHeight_)};
     sfWindow_.create(sf::VideoMode(windowWidth_, windowHeight_), "Automaton",
                      sf::Style::Titlebar | sf::Style::Close);
-    sfTexture_.create(polyWidth_, polyHeight_);
+    sfTexture_.create(windowWidth_, windowHeight_);
   }
 
   void run() {
