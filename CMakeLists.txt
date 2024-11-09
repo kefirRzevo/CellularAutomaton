@@ -2,40 +2,21 @@ cmake_minimum_required(VERSION 3.16)
 
 project(automaton)
 
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
-option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
-
 set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_COMPILER g++)
+set(CMAKE_CXX_FLAGS "-O3 -Wall -Wextra")
 
-find_package(Boost 1.40 REQUIRED COMPONENTS program_options dynamic_bitset)
+find_package(Boost 1.73 REQUIRED COMPONENTS program_options)
+include(FetchContent)
 FetchContent_Declare(SFML
-    GIT_REPOSITORY https://github.com/SFML/SFML.git
-    GIT_TAG 2.6.x)
+  GIT_REPOSITORY https://github.com/SFML/SFML.git
+  GIT_TAG 2.6.x
+  GIT_SHALLOW ON
+  EXCLUDE_FROM_ALL
+  SYSTEM
+)
 FetchContent_MakeAvailable(SFML)
 
-if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
-    set(COMPILER_SETTINGS -g -O0 -Wall -Wextra -Wpedantic)  
-else ()
-    set(COMPILER_SETTINGS -O2 -Wall -Wextra -Wpedantic)
-endif ()
-add_compile_options(${COMPILER_SETTINGS})
-
-set(PROJECT_SOURCES Automaton.cpp)
-add_executable(
-  ${PROJECT_NAME}
-  ${PROJECT_SOURCES}
-)
-
-include_directories(include ${Boost_INCLUDE_DIR})
-
-target_include_directories(
-  ${PROJECT_NAME} PRIVATE
-  ${CMAKE_CURRENT_BINARY_DIR}
-)
-target_link_libraries(
-    ${PROJECT_NAME} PRIVATE
-    ${Boost_PROGRAM_OPTIONS_LIBRARY}
-    ${Boost_DYNAMIC_BITSET_LIBRARY}
-    sfml-graphics sfml-window sfml-system
-)
+add_executable (${PROJECT_NAME} Automaton.cc)
+target_include_directories (${PROJECT_NAME} PRIVATE includes)
+target_include_directories (${PROJECT_NAME} PRIVATE include ${Boost_INCLUDE_DIR})
+target_link_libraries (${PROJECT_NAME} ${Boost_PROGRAM_OPTIONS_LIBRARY} sfml-graphics sfml-window sfml-system)

@@ -1,118 +1,220 @@
 #pragma once
 
-#include <string>
-#include <random>
-#include <bitset>
-#include <iostream>
 #include <algorithm>
+#include <bitset>
+#include <deque>
+#include <filesystem>
+#include <iostream>
+#include <random>
+#include <string>
+#include <unordered_map>
 
-#include <boost/dynamic_bitset.hpp> 
+#include "Utils.hpp"
+
+namespace fs = std::filesystem;
+
+fs::path repoPath = fs::path(__FILE__).parent_path().parent_path();
 
 namespace automaton {
 
-class Rule {
-  unsigned char val_;
-
+class Rule final {
 public:
-  Rule(unsigned char val) : val_(val) {}
+  using value_type = unsigned char;
 
-  bool calculateValue(std::bitset<3> neighbors) const {
+  Rule(value_type val) : val_(val) {}
+
+  value_type getValue() const noexcept { return val_; }
+
+  bool apply(std::bitset<3> neighbors) const {
     return val_ & (1 << neighbors.to_ulong());
   }
+
+private:
+  value_type val_;
 };
 
-class Row {
-  boost::dynamic_bitset<> data_;
+class BoundCond final {
+  BoolStorage data_;
 
 public:
-  Row() = default;
+  using DataIter = BoolStorage::const_iterator;
 
-  Row(size_t width) {
-    data_.resize(width);
-    data_.shrink_to_fit();
+  BoundCond() = default;
+
+  static BoundCond createFromString(std::string_view string) {
+    BoundCond boundCond;
+    std::transform(string.begin(), string.end(),
+                   std::back_inserter(boundCond.data_), [](auto &&it) {
+                     switch (it) {
+                     case '0':
+                       return false;
+                     case '1':
+                       return true;
+                     default:
+                       auto msg = "Unknown symbol '" + std::string(it, 1) + "'";
+                       throw std::runtime_error(msg);
+                     }
+                   });
+    return boundCond;
   }
 
-  Row(const std::string& string) : data_(string) {}
+  static BoundCond createRandom(size_t width) {
+    BoundCond boundCond;
+    std::srand(0);
+    auto &data = boundCond.data_;
+    data.clear();
+    data.insert(data.begin(), std::rand() % width, true);
+    data.resize(width);
+    data.shrink_to_fit();
+    std::shuffle(data.begin(), data.end(), std::mt19937{});
+    return boundCond;
+  }
+
+  void dump(std::ostream &os) const {
+    os << automaton::boolStorageToString(data_) << std::endl;
+  }
 
   size_t size() const { return data_.size(); }
-
-  void set(size_t indx, bool val) { data_.set(indx, val); }
-  bool get(size_t indx) const { return data_.test(indx); }
-
-  void dump() const {
-    std::string string(data_.size(), ' ');
-    boost::to_string(data_, string);
-    std::cout << string << std::endl;
-  }
-
-  void randomize(unsigned int seed) {
-    std::srand(seed);
-    std::vector<bool> data(data_.size());
-    size_t size = std::rand() % data_.size();
-    std::fill(data.begin(), data.begin() + size, 1);
-    std::shuffle(data.begin(), data.end(), std::mt19937{});
-    for (size_t i = 0; i != data_.size(); ++i) {
-      data_.set(i, data[i]);
-    }
-    data_.shrink_to_fit();
-  }
+  DataIter begin() const { return data_.begin(); }
+  DataIter end() const { return data_.end(); }
 };
 
-class Polygon {
-  size_t width_;
-  size_t height_;
-  size_t curRowIndx_;
+class BoundCondBuilder final {
+  std::string data_;
 
-  std::vector<Row> rows_;
+  using GlidersCollection = std::unordered_map<std::string, std::string>;
+
+  GlidersCollection gliders_;
+
+  void initialize() {
+    for (auto &&gliderIter : fs::directory_iterator{repoPath / "resources"}) {
+      auto gliderPath = gliderIter.path();
+      auto gliderName = gliderPath.filename().generic_u8string();
+      auto gliderString = automaton::readAndJoin(gliderPath.generic_u8string());
+      gliders_.emplace(std::move(gliderName), std::move(gliderString));
+    }
+  }
+
+  void dumpGlidersCollection(std::ostream &os) const {
+    os << gliders_.size() << " gliders" << std::endl;
+    for (auto &&[name, value] : gliders_) {
+      os << name << std::endl;
+      os << value << std::endl;
+    }
+  }
+
+  struct ParsedGlider {
+    size_t repeatsCount_;
+    std::string name_;
+
+    ParsedGlider(size_t repeatCount, std::string &&name)
+        : repeatsCount_(repeatCount), name_(std::move(name)) {}
+  };
+
+  using ParsedGliders = std::vector<ParsedGlider>;
+
+  ParsedGliders parseGliders(std::string_view buildGlidersPath) {
+    auto string = automaton::readAndJoin(buildGlidersPath);
+    std::stringstream ss{string};
+    std::string gliderName;
+    auto isPosNumber = [](std::string_view string) -> bool {
+      return std::all_of(string.begin(), string.end(),
+                         [](auto &&it) { return std::isdigit(it); });
+    };
+
+    ParsedGliders parsedGliders;
+    std::string word;
+    while (ss >> word) {
+      int repeatsCount = 1;
+      if (isPosNumber(word)) {
+        repeatsCount = std::atoi(word.c_str());
+        ss >> word;
+      }
+      parsedGliders.emplace_back(repeatsCount, std::move(word));
+    }
+    return parsedGliders;
+  }
 
 public:
-  Polygon(size_t height, const Row& boundaryCond)
-  : width_(boundaryCond.size()), height_(height),
-    curRowIndx_(0), rows_(height) {
-      std::fill(rows_.begin(), rows_.end(), Row{width_});
-      rows_[0] = boundaryCond;
+  BoundCondBuilder() { initialize(); }
+
+  BoundCond build(std::string_view buildGlidersPath) {
+    std::string resString;
+    auto parsedGliders = parseGliders(buildGlidersPath);
+    if (parsedGliders.empty()) {
+      auto msg = "No gliders in '" + std::string(buildGlidersPath) + "'";
+      throw std::runtime_error(msg);
     }
-
-  size_t getWidth() const { return width_; }
-  size_t getHeight() const { return height_; }
-
-  auto& operator[](size_t indx) { return rows_[indx]; }
-  const auto& operator[](size_t indx) const { return rows_[indx]; }
-
-  auto begin() { return rows_.begin(); }
-  auto begin() const { return rows_.begin(); }
-  auto end() { return rows_.end(); }
-  auto end() const { return rows_.end(); }
-
-  void update(const Rule& rule) {
-    auto& curRow = rows_.at(curRowIndx_);
-    curRowIndx_ = (curRowIndx_ + 1) % height_;
-    auto& nextRow = rows_.at(curRowIndx_);
-    std::bitset<3> neighbors;
-    for (auto i = 0; i != static_cast<int>(width_); ++i) {
-      neighbors[0] = curRow.get((i - 1) % width_);
-      neighbors[1] = curRow.get(i);
-      neighbors[2] = curRow.get((i + 1) % width_);
-      nextRow.set(i, rule.calculateValue(neighbors));
+    for (auto &&glider : parsedGliders) {
+      auto found = gliders_.find(std::string(glider.name_));
+      if (found == gliders_.end()) {
+        auto msg = "Glider '" + std::string(glider.name_) + "' not found";
+        throw std::runtime_error(msg);
+      }
+      for (size_t i = 0; i != glider.repeatsCount_; ++i)
+        resString.append(found->second.c_str());
     }
+    return BoundCond::createFromString(resString);
   }
 };
 
-class Model {
+class Polygon final {
+public:
+  using size_type = size_t;
+  using Row = BoolStorage;
+  using RowStorage = std::vector<Row>;
+  using RowIter = RowStorage::const_iterator;
+
+private:
+  RowStorage rows_;
+
+public:
+  template <class InputIt>
+  Polygon(size_type height, InputIt first, InputIt last) : rows_(height) {
+    rows_.front() = Row{first, last};
+  }
+
+  size_type width() const { return rows_.front().size(); }
+  size_type height() const { return rows_.size(); }
+
+  const Row &operator[](size_type indx) const { return rows_[indx]; }
+
+  RowIter begin() const { return rows_.begin(); }
+  RowIter end() const { return rows_.end(); }
+
+  void fill(const Rule &rule) {
+    auto prevRow = rows_.begin();
+    auto curRow = std::next(rows_.begin());
+    std::bitset<3> neighbors;
+    for (; curRow != rows_.end(); ++curRow) {
+      curRow->resize(width());
+      for (size_type i = 0; i != width(); ++i) {
+        neighbors[0] = prevRow->at((i + 1) % width());
+        neighbors[1] = prevRow->at(i);
+        neighbors[2] = prevRow->at((i - 1 + width()) % width());
+        curRow->at(i) = rule.apply(neighbors);
+      }
+      prevRow = curRow;
+    }
+  }
+
+  void dump(std::ostream &os) const {
+    for (const auto &row : rows_)
+      os << automaton::boolStorageToString(row) << std::endl;
+  }
+};
+
+class Model final {
   Rule rule_;
   Polygon poly_;
 
 public:
-  Model(const Rule& rule, const Polygon& poly)
-  : rule_(rule), poly_(poly) {}
-
-  void update() {
-    poly_.update(rule_);
+  Model(Rule &&rule, Polygon &&poly)
+      : rule_(std::move(rule)), poly_(std::move(poly)) {
+    poly_.fill(rule_);
   }
 
-  const Polygon& getPolygon() const {
-    return poly_;
-  }
+  const Polygon &getPolygon() const { return poly_; }
 };
 
 } // namespace automaton
